@@ -48,12 +48,9 @@ func (afd *AudioFileDecrypter) DecryptAudioWithBlock(index int, block cipher.Blo
 	afd.ivDiff.SetInt64(int64(0x100))
 
 	for i := 0; i < length; i += 4096 {
-		// fmt.Printf("IV (chunk index %d): %x\n", chunkIndex, ivBytes)
 		endBytes := int(math.Min(float64(i+4096), float64(length)))
-
 		stream := cipher.NewCTR(block, afd.ivInt.Bytes())
 		stream.XORKeyStream(plaintext[i:endBytes], ciphertext[i:endBytes])
-
 		afd.ivInt.Add(afd.ivInt, afd.ivDiff)
 	}
 

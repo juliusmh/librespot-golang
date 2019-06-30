@@ -3,43 +3,55 @@ package mercury
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/golang/protobuf/proto"
-	"github.com/librespot-org/librespot-golang/Spotify"
-	"github.com/librespot-org/librespot-golang/librespot/metadata"
 	"net/url"
+
+	"github.com/golang/protobuf/proto"
+
+	"github.com/juliusmh/librespot-golang/Spotify"
+	"github.com/juliusmh/librespot-golang/librespot/metadata"
 )
 
-func (m *Client) mercuryGet(url string) []byte {
+func (m *Client) mercuryGet(url string) ([]byte, error) {
 	done := make(chan []byte)
-	go m.Request(Request{
-		Method:  "GET",
-		Uri:     url,
-		Payload: [][]byte{},
-	}, func(res Response) {
-		done <- res.CombinePayload()
-	})
-
+	errs := make(chan error, 0)
+	go func(){
+		err := m.Request(Request{
+			Method:  "GET",
+			Uri:     url,
+			Payload: [][]byte{},
+		}, func(res Response) {
+			done <- res.CombinePayload()
+		})
+		if err != nil {
+			errs <- err
+		}
+	}()
+	select {
+		case err := <-errs: return nil, err
+		default:
+	}
 	result := <-done
-	return result
+	return result, nil
 }
 
-func (m *Client) mercuryGetJson(url string, result interface{}) (err error) {
-	data := m.mercuryGet(url)
-	// fmt.Printf("%s", data)
-	err = json.Unmarshal(data, result)
-	return
+func (m *Client) mercuryGetJson(url string, result interface{}) error {
+	data, err := m.mercuryGet(url)
+	if err != nil {
+		return err
+	}
+	return json.Unmarshal(data, result)
 }
 
-func (m *Client) mercuryGetProto(url string, result proto.Message) (err error) {
-	data := m.mercuryGet(url)
-	// ioutil.WriteFile("/tmp/proto.blob", data, 0644)
-	err = proto.Unmarshal(data, result)
-	return
+func (m *Client) mercuryGetProto(url string, result proto.Message) error {
+	data, err := m.mercuryGet(url)
+	if err != nil {
+		return err
+	}
+	return proto.Unmarshal(data, result)
 }
 
 func (m *Client) GetRootPlaylist(username string) (*Spotify.SelectedListContent, error) {
 	uri := fmt.Sprintf("hm://playlist/user/%s/rootlist", username)
-
 	result := &Spotify.SelectedListContent{}
 	err := m.mercuryGetProto(uri, result)
 	return result, err
@@ -47,16 +59,17 @@ func (m *Client) GetRootPlaylist(username string) (*Spotify.SelectedListContent,
 
 func (m *Client) GetPlaylist(id string) (*Spotify.SelectedListContent, error) {
 	uri := fmt.Sprintf("hm://playlist/%s", id)
-
 	result := &Spotify.SelectedListContent{}
 	err := m.mercuryGetProto(uri, result)
 	return result, err
 }
 
 func (m *Client) GetToken(clientId string, scopes string) (*metadata.Token, error) {
-	uri := fmt.Sprintf("hm://keymaster/token/authenticated?client_id=%s&scope=%s", url.QueryEscape(clientId),
-		url.QueryEscape(scopes))
-
+	uri := fmt.Sprintf(
+		"hm://keymaster/token/authenticated?client_id=%s&scope=%s",
+		url.QueryEscape(clientId),
+		url.QueryEscape(scopes),
+	)
 	token := &metadata.Token{}
 	err := m.mercuryGetJson(uri, token)
 	return token, err
@@ -71,9 +84,7 @@ func (m *Client) Search(search string, limit int, country string, username strin
 	v.Set("country", country)
 	v.Set("platform", "zelda")
 	v.Set("username", username)
-
 	uri := fmt.Sprintf("hm://searchview/km/v4/search/%s?%s", url.QueryEscape(search), v.Encode())
-
 	result := &metadata.SearchResponse{}
 	err := m.mercuryGetJson(uri, result)
 	return result, err
@@ -81,8 +92,10 @@ func (m *Client) Search(search string, limit int, country string, username strin
 
 func (m *Client) Suggest(search string) (*metadata.SuggestResult, error) {
 	uri := "hm://searchview/km/v3/suggest/" + url.QueryEscape(search) + "?limit=3&intent=2516516747764520149&sequence=0&catalogue=&country=&locale=&platform=zelda&username="
-	data := m.mercuryGet(uri)
-
+	data, err := m.mercuryGet(uri)
+	if err != nil {
+		return nil, err
+	}
 	return parseSuggest(data)
 }
 
@@ -111,9 +124,8 @@ func parseSuggest(body []byte) (*metadata.SuggestResult, error) {
 	result := &metadata.SuggestResult{}
 	err := json.Unmarshal(body, result)
 	if err != nil {
-		fmt.Println("err", err)
+		return nil, err
 	}
-
 	for _, s := range result.Sections {
 		switch s.Typ {
 		case "top-results":

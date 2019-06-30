@@ -3,10 +3,11 @@ package crypto
 import (
 	"bytes"
 	"encoding/binary"
-	"github.com/librespot-org/librespot-golang/librespot/connection"
 	"io"
 	"log"
 	"sync"
+
+	"github.com/juliusmh/librespot-golang/librespot/connection"
 )
 
 type shannonStream struct {

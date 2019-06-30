@@ -30,8 +30,6 @@ func (c *Channel) handlePacket(data []byte) {
 
 	if !c.dataMode {
 		// Read the header
-		// fmt.Printf("[channel] Reading in header mode, size=%d\n", dataReader.Len())
-
 		length := uint16(0)
 		var err error = nil
 		for err == nil {
@@ -41,13 +39,9 @@ func (c *Channel) handlePacket(data []byte) {
 				break
 			}
 
-			// fmt.Printf("[channel] Header part length: %d\n", length)
-
 			if length > 0 {
 				var headerId uint8
 				binary.Read(dataReader, binary.BigEndian, &headerId)
-
-				// fmt.Printf("[channel] Header ID: 0x%x\n", headerId)
 
 				read := uint16(0)
 				if c.onHeader != nil {
@@ -60,14 +54,11 @@ func (c *Channel) handlePacket(data []byte) {
 		}
 
 		if c.onData != nil {
-			// fmt.Printf("[channel] Switching channel to dataMode\n")
 			c.dataMode = true
 		} else {
 			c.onRelease(c)
 		}
 	} else {
-		// fmt.Printf("[channel] Reading in dataMode\n")
-
 		if len(data) == 0 {
 			if c.onData != nil {
 				c.onData(c, nil)

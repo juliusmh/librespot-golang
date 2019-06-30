@@ -6,11 +6,12 @@ import (
 	"crypto/cipher"
 	"encoding/binary"
 	"fmt"
-	"github.com/librespot-org/librespot-golang/Spotify"
-	"github.com/librespot-org/librespot-golang/librespot/connection"
 	"io"
 	"math"
 	"sync"
+
+	"github.com/juliusmh/librespot-golang/Spotify"
+	"github.com/juliusmh/librespot-golang/librespot/connection"
 )
 
 const kChunkSize = 32768 // In number of words (so actual byte size is kChunkSize*4, aka. kChunkByteSize)
@@ -93,8 +94,6 @@ func (a *AudioFile) Read(buf []byte) (int, error) {
 	chunkIdx := a.chunkIndexAtByte(a.cursor)
 
 	for totalWritten < length {
-		// fmt.Printf("[audiofile] Cursor: %d, len: %d, matching chunk %d\n", a.cursor, length, chunkIdx)
-
 		if chunkIdx >= a.totalChunks() {
 			// We've reached the last chunk, so we can signal EOF
 			eof = true
@@ -102,7 +101,6 @@ func (a *AudioFile) Read(buf []byte) (int, error) {
 		} else if !a.hasChunk(chunkIdx) {
 			// A chunk we are looking to read is unavailable, request it so that we can return it on the next Read call
 			a.requestChunk(chunkIdx)
-			// fmt.Printf("[audiofile] Doesn't have chunk %d yet, queuing\n", chunkIdx)
 			break
 		} else {
 			// cursorEnd is the ending position in the output buffer. It is either the current outBufCursor + the size
@@ -189,15 +187,12 @@ func (a *AudioFile) hasChunk(index int) bool {
 func (a *AudioFile) loadKey(trackId []byte) error {
 	key, err := a.player.loadTrackKey(trackId, a.fileId)
 	if err != nil {
-		fmt.Printf("[audiofile] Unable to load key: %s\n", err)
-		return err
+		return fmt.Errorf("unable to load key: %+v", err)
 	}
-
 	a.cipher, err = aes.NewCipher(key)
 	if err != nil {
-		return err
+		return fmt.Errorf("unable to decrypt aes cipher: %+v", err)
 	}
-
 	return nil
 }
 
@@ -251,10 +246,16 @@ func (a *AudioFile) loadChunk(chunkIndex int) error {
 
 	chunkOffsetStart := uint32(chunkIndex * kChunkSize)
 	chunkOffsetEnd := uint32((chunkIndex + 1) * kChunkSize)
-	err := a.player.stream.SendPacket(connection.PacketStreamChunk, buildAudioChunkRequest(channel.num, a.fileId, chunkOffsetStart, chunkOffsetEnd))
-
-	if err != nil {
-		return err
+	if err := a.player.stream.SendPacket(
+		connection.PacketStreamChunk,
+		buildAudioChunkRequest(
+			channel.num,
+			a.fileId,
+			chunkOffsetStart,
+			chunkOffsetEnd,
+		),
+	); err != nil {
+		return fmt.Errorf("could not send stream chunk: %+v", err)
 	}
 
 	chunkSz := 0
@@ -266,19 +267,12 @@ func (a *AudioFile) loadChunk(chunkIndex int) error {
 		if chunkLen > 0 {
 			copy(chunkData[chunkSz:chunkSz+chunkLen], chunk)
 			chunkSz += chunkLen
-
-			// fmt.Printf("Read %d/%d of chunk %d\n", sz, expSize, i)
 		} else {
 			break
 		}
 	}
-
-	// fmt.Printf("[AudioFile] Got encrypted chunk %d, len=%d...\n", i, len(wholeData))
-
 	a.putEncryptedChunk(chunkIndex, chunkData[0:chunkSz])
-
 	return nil
-
 }
 
 func (a *AudioFile) loadNextChunk() {
@@ -327,7 +321,6 @@ func (a *AudioFile) onChannelHeader(channel *Channel, id byte, data *bytes.Reade
 		var size uint32
 		binary.Read(data, binary.BigEndian, &size)
 		size *= 4
-		// fmt.Printf("[AudioFile] Audio file size: %d bytes\n", size)
 
 		if a.size != size {
 			a.lock.Lock()
@@ -358,12 +351,9 @@ func (a *AudioFile) onChannelHeader(channel *Channel, id byte, data *bytes.Reade
 func (a *AudioFile) onChannelData(channel *Channel, data []byte) uint16 {
 	if data != nil {
 		a.responseChan <- data
-
 		return 0 // uint16(len(data))
 	} else {
-		// fmt.Printf("[AudioFile] Got EOF (nil) audio data on channel %d!\n", channel.num)
 		a.responseChan <- []byte{}
-
 		return 0
 	}
 

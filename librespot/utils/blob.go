@@ -10,11 +10,13 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"errors"
-	"github.com/librespot-org/librespot-golang/librespot/crypto"
-	"golang.org/x/crypto/pbkdf2"
 	"log"
 	"math/big"
 	"os"
+
+	"golang.org/x/crypto/pbkdf2"
+
+	"github.com/juliusmh/librespot-golang/librespot/crypto"
 )
 
 // BlobInfo is the structure holding authentication blob data. The blob is an encoded/encrypted byte array (encoded
