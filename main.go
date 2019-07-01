@@ -39,11 +39,6 @@ func main() {
 	if *username != "" && *password != "" {
 		// Authenticate using a regular login and password, and store it in the blob file.
 		session, err = librespot.Login(*username, *password, *devicename)
-
-		err := ioutil.WriteFile(*blob, session.ReusableAuthBlob, 0600)
-		if err != nil {
-			fmt.Printf("Could not store authentication blob in blob.bin: %s\n", err)
-		}
 	} else if *blob != "" && *username != "" {
 		// Authenticate reusing an existing blob
 		blobBytes, err := ioutil.ReadFile(*blob)
@@ -299,11 +294,19 @@ func funcPlay(session *core.Session, trackID string) {
 
 	// Synchronously load the track
 	audioFile, err := session.Player().LoadTrack(selectedFile, track.GetGid())
-
-
 	if err != nil {
 		fmt.Printf("Error while loading track: %s\n", err)
+		return
 	}
-
-	fmt.Printf("size: %d\n", audioFile.Size())
+	fmt.Printf("Received aidio file: %d bytes\n", audioFile.Size())
+	buffer, err := ioutil.ReadAll(audioFile)
+	if err != nil {
+		fmt.Printf("Error while streaming file: %s\n", err)
+		return
+	}
+	err = ioutil.WriteFile(fmt.Sprintf("%s - %s.ogg", track.GetArtist()[0].GetName(), track.GetName()), buffer, os.ModePerm)
+	if err != nil {
+		fmt.Printf("Error while writing file: %s\n", err)
+		return
+	}
 }
